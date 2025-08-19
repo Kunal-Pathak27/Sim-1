@@ -18,42 +18,43 @@ This project integrates a Three.js-based robot simulator with a Python WebSocket
 - (Optional) An HTTP client (e.g., curl, Postman) for testing the Flask API endpoints
 
 ## Required Python Packages
-Install the following packages using pip:
+Install from `requirements.txt` (includes Flask, websockets, Pillow, requests):
 ```bash
-pip install websockets flask
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
 ```
 
 ## Setup and Running the Project 
 - git clone git@github.com:terafac/sim-1.git
 - cd sim-1
-- Install Dependencies: Open a terminal in the project directory and run:
+- Install Dependencies (Windows PowerShell):
 ```bash
-pip install websockets flask
-``` 
-- Run the Python Server:
-- In the terminal, navigate to the project directory.
-
-- Start the server by running:
-```bash
-python server.py
+python -m venv .venv
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
 ```
-The server will start:
-
-A WebSocket server on ws://localhost:8080
-
-A Flask API on port 5000
-
-Open the Three.js Simulator:
-
-Open the index.html file in your web browser.
-
-To run from terminal on port 8000, you can use the command
-
+- Run the Python Server (Flask + WebSocket + autonomous controller):
 ```bash
-python -m http.server
+./.venv/Scripts/python.exe server.py
+```
+  - WebSocket: ws://localhost:8080
+  - Flask API: http://127.0.0.1:5000
+
+- Open the Three.js Simulator:
+  - Serve static files on port 8000:
+```bash
+./.venv/Scripts/python.exe -m http.server 8000
+```
+  - Open `http://localhost:8000/index.html` in your browser.
+
+Notes
+- If 8080 is busy, start the server with env overrides and pass the WS URL to the page:
+```bash
+$env:WS_HOST="127.0.0.1"; $env:WS_PORT="8090"; ./.venv/Scripts/python.exe server.py
+# then open
+http://localhost:8000/index.html?ws=ws://127.0.0.1:8090
 ```
 
-The simulator will automatically connect to the WebSocket server at ws://localhost:8080.
+The simulator will connect to the WebSocket server and the robot will begin autonomous navigation.
 
 Check your browser’s console or the server terminal for connection messages (e.g., "Client connected via WebSocket").
 
@@ -155,7 +156,8 @@ The Three.js simulator sends back WebSocket messages. Examples include:
   "type": "capture_image_response",
   "image": "<Base64 encoded PNG image>",
   "timestamp": <timestamp>,
-  "position": { "x": <current_x>, "y": <current_y>, "z": <current_z> }
+  "position": { "x": <current_x>, "y": <current_y>, "z": <current_z> },
+  "headingDeg": <robot_heading_degrees>
 }
 ```
 
@@ -276,6 +278,18 @@ Here’s a drop-in README section you can paste under **API Endpoints and Simula
 ```bash
 curl http://localhost:5000/collisions
 ```
+
+## 9. Status
+
+- **Endpoint:** `/status`
+- **Method:** `GET`
+- **Response:**
+
+```json
+{ "collisions": <number>, "goal_reached": <bool>, "goal_position": {"x": <x>, "y": <y>, "z": <z>} }
+```
+
+Use this to track trials and compute averages in automated runs.
 
 
 ## 7. Moving Obstacles
@@ -401,6 +415,50 @@ curl -X POST http://localhost:5000/reset
 
 ---
 
+## Autonomous Mode (Computer Vision)
+
+- On startup, the server sets a goal near a corner (inset inside 100×100 floor).
+- It repeatedly triggers `/capture`, decodes the image (Pillow), detects green obstacles and the cyan goal flag, and issues `/move_rel`:
+  - Near-field safety band prevents forward motion when anything is directly ahead.
+  - When the goal isn’t visible, heading and position bias turns toward the goal.
+- Parameters (in `server.py`):
+  - `max_turn_deg` (default 30)
+  - `forward_step` (default 0.5)
+  - `obstacle_threshold`, `near_blocked_threshold`
+
+No hardcoded obstacle locations are used; decisions are image-driven.
+
+---
+
+## Deliverables & Experiment Automation
+
+An automation script `experiment.py` runs the trials and collects stats.
+
+Prereq: servers running and simulator page open (so WebSocket is connected).
+
+### Level 1
+- Four runs with goals in four corners, static obstacles.
+```bash
+./.venv/Scripts/python.exe experiment.py 1
+```
+Produces JSON with per-run collisions and the average.
+
+### Level 2
+- Four runs with moving obstacles enabled.
+```bash
+./.venv/Scripts/python.exe experiment.py 2
+```
+
+### Level 3
+- Sweep obstacle speeds and report average collisions per speed (ready to plot).
+```bash
+./.venv/Scripts/python.exe experiment.py 3
+```
+
+For videos, screen-record the simulator while the script runs Level 1 and Level 2.
+
+---
+
 ### Simulator Responses (added)
 
 * **Reset Confirmation** (from simulator → server via WebSocket):
@@ -450,5 +508,6 @@ Port Availability: Ensure that ports 5000 and 8080 are free.
 Browser Console: Check for errors if the simulator does not load or connect.
 
 Firewall/Antivirus: Verify that your firewall or antivirus software is not blocking the connections.
-#   S i m - 1  
+#   S i m - 1 
+ 
  
